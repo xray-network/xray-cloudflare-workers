@@ -1,5 +1,5 @@
 interface Env {
-	JWT_BEARER: string;
+	JWT_BEARER_TOKEN: string;
 	API_REQUESTS_COUNTER: KVNamespace
 	API_HEALTH: KVNamespace
 
