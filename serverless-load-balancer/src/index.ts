@@ -19,8 +19,6 @@ const MAP_HEALTH_PATHNAME: Types.MapHealthPathname = {
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const JWT_BEARER_TOKEN = env.JWT_BEARER_TOKEN
-
 		const apis = getApisObject(serversInitialConfig, API_GROUP, API_PREFIX, API_PROTOCOL, MAP_HEALTH_PATHNAME)
 		const {
 			segments: [group, network, service, prefix, version],
@@ -28,19 +26,32 @@ export default {
 			search,
 		} = getUrlSegments(new URL(request.url))
 
+		if (request.method === "OPTIONS") {
+			return new Response(null, {
+				headers: {
+					"Access-Control-Allow-Origin": "*",
+					"Access-Control-Allow-Methods": ALLOWED_METHODS.join(", "),
+					"Access-Control-Max-Age": "86400",
+					"Access-Control-Allow-Headers": "Origin, X-Requested-With, Content-Type, Accept",
+				},
+			})
+		}
+		
+		if (!ALLOWED_METHODS.includes(request.method)) return throw405()
 		if (group !== API_GROUP) return throw404()
 		if (network === "stats") return getStats() // Gather API Stats, with dirty route hack ofc :)
 		if (prefix !== API_PREFIX) return throw404()
-		if (!ALLOWED_METHODS.includes(request.method)) return throw405()
+		if (!apis?.[network]?.[service]?.[version]) return throw404()
 		if (request.headers.get("Upgrade") === "websocket") return throw404()
 		if (request.headers.get("Connection") === "Upgrade") return throw404()
-		if (!apis?.[network]?.[service]?.[version]) return throw404()
 
 		const serversPool = apis[network][service][version]
 		const serverRandom = serversPool[Math.floor(Math.random() * serversPool.length)] // TODO: Perform health check and select random server
 		const __pathname = `${pathname.replace(/^\//g, "").slice(serverRandom.hostResolver.length)}`
 
 		const response = await fetch(`${serverRandom.host}${__pathname}${search}`, {
+			method: request.method,
+			...(request.method === "POST" && { body: request.body }),
 			headers: {
 				HostResolver: serverRandom.hostResolver,
 				...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
@@ -54,7 +65,13 @@ export default {
 		ctx.waitUntil(delayedProcessing()) // Async update requests count (Workers KV)
 
 		if (response.ok) {
-			return new Response(response.body, { status: response.status, headers: response.headers })
+			return new Response(response.body, {
+				status: response.status,
+				headers: {
+					...response.headers,
+					"Access-Control-Allow-Origin": "*",
+				},
+			})
 		}
 
 		if (response.status === 503) return throw503()
