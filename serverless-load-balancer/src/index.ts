@@ -42,8 +42,8 @@ export default {
 
 		const response = await fetch(`${serverRandom.host}${__pathname}${search}`, {
 			headers: {
-				"HostResolver": serverRandom.hostResolver,
-				...(env.JWT_BEARER_TOKEN && { "BearerResolver": env.JWT_BEARER_TOKEN })
+				HostResolver: serverRandom.hostResolver,
+				...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
 			},
 		})
 
@@ -68,7 +68,7 @@ const getApisObject = (
 	apiGroup: string,
 	apiPrefix: string,
 	apiProtocol: string,
-	mapHealthPathname: Types.MapHealthPathname,
+	mapHealthPathname: Types.MapHealthPathname
 ): Types.ServerConfig => {
 	return servers.reduce<Types.ServerConfig>((acc, server) => {
 		if (!server.active) return acc
@@ -129,7 +129,6 @@ const throw405 = () => {
 const throw503 = () => {
 	return new Response("503. Service unavailable. No server is available to handle this request", { status: 503 })
 }
-
 
 const throw504 = () => {
 	return new Response("504. Gateway time-out. The server didn't respond in time", { status: 504 })
