@@ -193,7 +193,7 @@ const getStats = async (env: Env) => {
 		const id = requestsList.keys[key].name
 		countsRaw.push({
 			id: id.split("/").slice(1).join("/"),
-			count: await env.KV_API_REQUESTS_COUNTER.get(id),
+			count: Number(await env.KV_API_REQUESTS_COUNTER.get(id) || 0),
 		})
 	}
 
