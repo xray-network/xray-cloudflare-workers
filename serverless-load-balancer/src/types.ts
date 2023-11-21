@@ -9,24 +9,30 @@ export type ServersInitialConfig = {
 	}[]
 }[]
 
+export type Server = {
+	active: boolean
+	healthUrl: string
+	host: string
+	hostResolver: string
+	id: string
+}
+
 export type ServerConfig = {
 	[network: string]: {
 		[service: string]: {
-			[version: string]: {
-				active: boolean
-				healthUrl: string
-				host: string
-				hostResolver: string
-				id: string
-			}[]
+			[version: string]: Server[]
 		}
 	}
 }
 
-export type Server = {
-	name: string
-	url: string
+export type ServerHealthStatus = {
+	id: string
 	healthy: boolean
+}
+
+export type ServerHealthStatusResponse = {
+	updatedAt: string
+	status: ServerHealthStatus[]
 }
 
 export type MapHealthPathname = {

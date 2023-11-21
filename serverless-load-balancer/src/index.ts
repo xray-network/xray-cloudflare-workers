@@ -11,6 +11,8 @@ const API_PROTOCOL = "https:"
 const API_GROUP = "output"
 const API_PREFIX = "api"
 const ALLOWED_METHODS = ["GET", "POST", "OPTIONS", "HEAD"]
+const HEALTHCHECK_ENABLED = false // choose healthy servers only
+const HEALTHCHECK_UPDATE_ENABLED = true // update health status every minute
 const MAP_HEALTH_PATHNAME: Types.MapHealthPathname = {
 	koios: "tip",
 	kupo: "health",
@@ -18,13 +20,11 @@ const MAP_HEALTH_PATHNAME: Types.MapHealthPathname = {
 }
 
 export default {
+	// Main fetch handler
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const apis = getApisObject(serversInitialConfig, API_GROUP, API_PREFIX, API_PROTOCOL, MAP_HEALTH_PATHNAME)
-		const {
-			segments: [group, network, service, prefix, version],
-			pathname,
-			search,
-		} = getUrlSegments(new URL(request.url))
+		const apis = getApisObject(serversInitialConfig)
+		const { segments, pathname, search } = getUrlSegments(new URL(request.url))
+		const [group, network, service, prefix, version] = segments
 
 		if (request.method === "OPTIONS") {
 			return new Response(null, {
@@ -36,37 +36,39 @@ export default {
 				},
 			})
 		}
-		
+
 		if (!ALLOWED_METHODS.includes(request.method)) return throw405()
 		if (group !== API_GROUP) return throw404()
-		if (network === "stats") return getStats() // Gather API Stats, with dirty route hack ofc :)
+		if (network === "stats") return await getStats(env) // Gather API Stats, with dirty route hack ofc :)
 		if (prefix !== API_PREFIX) return throw404()
 		if (!apis?.[network]?.[service]?.[version]) return throw404()
 		if (request.headers.get("Upgrade") === "websocket") return throw404()
 		if (request.headers.get("Connection") === "Upgrade") return throw404()
 
 		const serversPool = apis[network][service][version]
-		const serverRandom = serversPool[Math.floor(Math.random() * serversPool.length)] // TODO: Perform health check and select random server
-		const __pathname = `${pathname.replace(/^\//g, "").slice(serverRandom.hostResolver.length)}`
+		const serverRandom = await getServerRandom(serversPool, env)
 
-		const response = await fetch(`${serverRandom.host}${__pathname}${search}`, {
-			method: request.method,
-			...(request.method === "POST" && { body: request.body }),
-			headers: {
-				HostResolver: serverRandom.hostResolver,
-				...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
-			},
-		})
+		const response = await fetch(
+			`${serverRandom.host}${`${pathname.replace(/^\//g, "").slice(serverRandom.hostResolver.length)}`}${search}`,
+			{
+				method: request.method,
+				...(request.method === "POST" && { body: request.body }),
+				headers: {
+					HostResolver: serverRandom.hostResolver,
+					...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
+				},
+			}
+		)
 
 		const delayedProcessing = async () => {
-			const requestsCount = (await env.API_REQUESTS_COUNTER.get(serverRandom.id)) || 0
-			await env.API_REQUESTS_COUNTER.put(serverRandom.id, (Number(requestsCount) + 1).toString())
+			const requestsCount = (await env.KV_API_REQUESTS_COUNTER.get(serverRandom.id)) || 0
+			await env.KV_API_REQUESTS_COUNTER.put(serverRandom.id, (Number(requestsCount) + 1).toString())
 		}
-		ctx.waitUntil(delayedProcessing()) // Async update requests count (Workers KV)
+		ctx.waitUntil(delayedProcessing())
 
 		if (response.ok) {
 			return new Response(response.body, {
-				status: response.status,
+				...response,
 				headers: {
 					...response.headers,
 					"Access-Control-Allow-Origin": "*",
@@ -78,15 +80,47 @@ export default {
 		if (response.status === 504) return throw504()
 		return throwReject(response)
 	},
+
+	// Crons handler
+	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+		const delayedProcessing = async () => {
+			if (HEALTHCHECK_UPDATE_ENABLED) {
+				if (event.cron === "* * * * *") {
+					const apis = getApisObject(serversInitialConfig)
+					const healthCheckResults = await getHealthCheckResults(apis, env)
+					const data: Types.ServerHealthStatusResponse = {
+						updatedAt: new Date().toISOString(),
+						status: healthCheckResults,
+					}
+
+					await env.KV_API_HEALTH.put("status", JSON.stringify(data))
+				}
+			}
+		}
+		ctx.waitUntil(delayedProcessing())
+	},
 }
 
-const getApisObject = (
-	servers: Types.ServersInitialConfig,
-	apiGroup: string,
-	apiPrefix: string,
-	apiProtocol: string,
-	mapHealthPathname: Types.MapHealthPathname
-): Types.ServerConfig => {
+const getServerRandom = async (serverPool: Types.Server[], env: Env): Promise<Types.Server> => {
+	const returnRandom = (__serverPool: Types.Server[]) => __serverPool[Math.floor(Math.random() * __serverPool.length)]
+	const getHealthyPools = async (__serverPool: Types.Server[]): Promise<Types.Server[]> => {
+		try {
+			const status: Types.ServerHealthStatusResponse = JSON.parse((await env.KV_API_HEALTH.get("status")) || "{}")
+			return __serverPool.filter((server) => status?.status?.find((status) => status.id === server.id))
+		} catch {
+			return []
+		}
+	}
+
+	if (HEALTHCHECK_ENABLED) {
+		const healthyPools = await getHealthyPools(serverPool)
+		return healthyPools.length ? returnRandom(healthyPools) : returnRandom(serverPool) // try hard
+	} else {
+		return returnRandom(serverPool)
+	}
+}
+
+const getApisObject = (servers: Types.ServersInitialConfig): Types.ServerConfig => {
 	return servers.reduce<Types.ServerConfig>((acc, server) => {
 		if (!server.active) return acc
 
@@ -99,10 +133,10 @@ const getApisObject = (
 
 			versionConfig.push({
 				active: service.active,
-				healthUrl: `${apiProtocol}//${server.host}/${mapHealthPathname[service.name] || ""}`,
-				host: `${apiProtocol}//${server.host}`,
-				hostResolver: `${apiGroup}/${service.network}/${service.name}/${apiPrefix}/${service.version}`,
-				id: `${server.host}/${apiGroup}/${service.network}/${service.name}/${apiPrefix}/${service.version}`,
+				healthUrl: `${API_PROTOCOL}//${server.host}/${MAP_HEALTH_PATHNAME[service.name] || ""}`,
+				host: `${API_PROTOCOL}//${server.host}`,
+				hostResolver: `${API_GROUP}/${service.network}/${service.name}/${API_PREFIX}/${service.version}`,
+				id: `${server.host}/${API_GROUP}/${service.network}/${service.name}/${API_PREFIX}/${service.version}`,
 			})
 
 			serviceConfig[service.version] = versionConfig
@@ -116,6 +150,84 @@ const getApisObject = (
 	}, {})
 }
 
+const getHealthCheckResults = async (apis: Types.ServerConfig, env: Env) => {
+	const healthCheckPromises: Promise<Types.ServerHealthStatus>[] = []
+
+	for (const network in apis) {
+		for (const service in apis[network]) {
+			for (const version in apis[network][service]) {
+				const serviceConfigs = apis[network][service][version]
+				serviceConfigs.forEach((serviceConfig) => {
+					if (serviceConfig.active) {
+						const healthCheckPromise = fetch(serviceConfig.healthUrl, {
+							headers: {
+								HostResolver: serviceConfig.hostResolver,
+								...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
+							},
+						})
+							.then((response) => ({
+								id: serviceConfig.id,
+								healthy: response.ok,
+							}))
+							.catch(() => ({
+								id: serviceConfig.id,
+								healthy: false,
+							}))
+
+						healthCheckPromises.push(healthCheckPromise)
+					}
+				})
+			}
+		}
+	}
+
+	return await Promise.all(healthCheckPromises)
+}
+
+const getStats = async (env: Env) => {
+	const healthRaw: Types.ServerHealthStatusResponse = JSON.parse((await env.KV_API_HEALTH.get("status")) || "{}")
+	const countsRaw = []
+	const requestsList = await env.KV_API_REQUESTS_COUNTER.list()
+
+	for (const key in requestsList.keys) {
+		const id = requestsList.keys[key].name
+		countsRaw.push({
+			id: id.split("/").slice(1).join("/"),
+			count: await env.KV_API_REQUESTS_COUNTER.get(id),
+		})
+	}
+
+	return new Response(
+		JSON.stringify({
+			health: { ...healthRaw, status: healthRaw.status.map((i) => ({ ...i, id: i.id.split("/").slice(1).join("/") })) },
+			counts: {
+				total: countsRaw.reduce((acc, i) => acc + Number(i.count), 0),
+				byServer: countsRaw,
+				byNetwork: countsRaw.reduce(
+					(acc, i) => {
+						const network = i.id.split("/")[1]
+						acc[network] = acc[network] ? acc[network] + Number(i.count) : Number(i.count)
+						return acc
+					},
+					{} as { [key: string]: number }
+				),
+				byService: countsRaw.reduce(
+					(acc, i) => {
+						const service = i.id.split("/")[2]
+						acc[service] = acc[service] ? acc[service] + Number(i.count) : Number(i.count)
+						return acc
+					},
+					{} as { [key: string]: number }
+				),
+			},
+		}),
+		{
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		}
+	)
+}
+
 const getUrlSegments = (url: URL) => {
 	const pathname = url.pathname
 	const search = url.search
@@ -126,13 +238,6 @@ const getUrlSegments = (url: URL) => {
 		pathname,
 		search,
 	}
-}
-
-const getStats = () => {
-	return new Response(JSON.stringify("stats_response"), {
-		status: 200,
-		headers: { "Content-Type": "application/json" },
-	})
 }
 
 const throw404 = () => {
@@ -152,27 +257,5 @@ const throw504 = () => {
 }
 
 const throwReject = (response: Response) => {
-	return new Response(response.body, { status: response.status, headers: response.headers })
+	return new Response(response.body, response)
 }
-
-// Durable Objects are not used because KV delays are sufficient(?) for stats needs
-// export class ApiRequestCounter {
-//   state: DurableObjectState
-
-//   constructor(state: DurableObjectState, env: Env) {
-//     this.state = state
-//   }
-
-//   async fetch(request: Request) {
-//     const url = new URL(request.url)
-//     const value: number = await this.state.storage.get("value") || 0
-//     switch (url.pathname) {
-//       case "/increment":
-//         const newValue = value + 1
-//         await this.state.storage.put("value", newValue)
-//         return new Response(newValue.toString())
-//       default:
-//         return new Response(value.toString())
-//     }
-//   }
-// }
