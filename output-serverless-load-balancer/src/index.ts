@@ -67,13 +67,9 @@ export default {
 		ctx.waitUntil(delayedProcessing())
 
 		if (response.ok) {
-			return new Response(response.body, {
-				...response,
-				headers: {
-					...response.headers,
-					"Access-Control-Allow-Origin": "*",
-				},
-			})
+			const headers = new Headers(response.headers)
+			headers.set("Access-Control-Allow-Origin", "*")
+			return new Response(response.body, { ...response, headers })
 		}
 
 		if (response.status === 503) return throw503()
@@ -193,7 +189,7 @@ const getStats = async (env: Env) => {
 		const id = requestsList.keys[key].name
 		countsRaw.push({
 			id: id.split("/").slice(1).join("/"),
-			count: Number(await env.KV_API_REQUESTS_COUNTER.get(id) || 0),
+			count: Number((await env.KV_API_REQUESTS_COUNTER.get(id)) || 0),
 		})
 	}
 
