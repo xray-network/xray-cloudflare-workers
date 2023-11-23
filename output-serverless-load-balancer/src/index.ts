@@ -47,6 +47,7 @@ export default {
 
 		const serversPool = apis[network][service][version]
 		const serverRandom = await getServerRandom(serversPool, env)
+		const bearerResolver = request.headers.get("BearerResolver")
 
 		const response = await fetch(
 			`${serverRandom.host}${`${pathname.replace(/^\//g, "").slice(serverRandom.hostResolver.length)}`}${search}`,
@@ -55,7 +56,7 @@ export default {
 				...(request.method === "POST" && { body: request.body }),
 				headers: {
 					HostResolver: serverRandom.hostResolver,
-					...(env.JWT_BEARER_TOKEN && { BearerResolver: env.JWT_BEARER_TOKEN }),
+					...(bearerResolver && { BearerResolver: bearerResolver }),
 				},
 			}
 		)
