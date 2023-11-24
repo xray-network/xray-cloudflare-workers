@@ -1,6 +1,6 @@
 /**
+ * @@ XRAY | Graph Output
  * Cloudflare Serverless Load Balancer
- * for XRAY | Graph Output Cluster
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
