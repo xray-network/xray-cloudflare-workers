@@ -1,4 +1,4 @@
-name = "ipfs-images-cdn-proxy"
+name = "metadata-images-to-xray-cdn"
 main = "src/index.ts"
 compatibility_date = "2023-11-24"
 node_compat = true

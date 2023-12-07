@@ -1,7 +1,6 @@
 /**
  * @@ XRAY | Graph | IPFS to Cloudflare Images CDN
- * CIP25, CIP26, CIP68, or REGISTRY images to Cloudflare Images CDN
- * Deprecated: moving to self-hosted IPFS caching solution
+ * Proxying CIP25, CIP26, CIP68, or REGISTRY images from/to Cloudflare Images CDN
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
@@ -63,7 +62,7 @@ export default {
 						const imageResponse = await fetch(imageRemoteURL)
 						if (!imageResponse.ok) throw new Error("Error getting image from IPFS")
 						if (Number(imageResponse.headers.get("content-length") || 0) > IMG_SIZE_LIMIT)
-							return throw404ImageTooLarge()
+							return throw413ImageTooLarge()
 						const imageBase64 = Buffer(await imageResponse.clone().arrayBuffer()).toString("base64") // TODO: Long run, should be optimized
 						await uploadImageBase64ToCF(imageBase64, type, fingerprint, env)
 						return await serveImageFromCF(type, fingerprint, size, request, env)
@@ -256,8 +255,8 @@ const throw404NoImage = () => {
 	return new Response("404. Image not found! Check if the request is correct", { status: 404 })
 }
 
-const throw404ImageTooLarge = () => {
-	return new Response("404. Image too large! The image exceeded the size limit of 20000000 bytes", { status: 404 })
+const throw413ImageTooLarge = () => {
+	return new Response(`413. Image too large! The image exceeded the size limit of ${IMG_SIZE_LIMIT} bytes`, { status: 413 })
 }
 
 const throw404CIPNotSupported = () => {

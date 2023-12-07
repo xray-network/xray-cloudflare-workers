@@ -1,6 +1,6 @@
 /**
  * @@ XRAY | Graph | IPFS Images CDN Proxy
- * Proxying CIP25, CIP26, CIP68, or REGISTRY images from `xray-ipfs-images-cdn`
+ * Proxying CIP25, CIP26, CIP68, or REGISTRY images from/to `xray-images-cdn`
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
@@ -11,6 +11,7 @@ const API_GROUP = "cdn"
 const ALLOWED_METHODS = ["GET", "POST", "OPTIONS", "HEAD"]
 const ALLOWED_NETWORKS = ["mainnet", "preprod", "preview"]
 const IMG_SIZES = ["32", "64", "128", "256", "512", "1024", "2048"]
+const IMG_SIZE_LIMIT = 50_000_000 // Max file size limit in bytes
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -64,12 +65,8 @@ const throw404NoImage = () => {
 	return new Response("404. Image not found! Check if the request is correct", { status: 404 })
 }
 
-const throw404ImageTooLarge = () => {
-	return new Response("404. Image too large! The image exceeded the size limit of 20000000 bytes", { status: 404 })
-}
-
-const throw404CIPNotSupported = () => {
-	return new Response("404. Current CIP is not yet supported", { status: 404 })
+const throw413ImageTooLarge = () => {
+	return new Response(`413. Image too large! The image exceeded the size limit of ${IMG_SIZE_LIMIT} bytes`, { status: 413 })
 }
 
 const throw404WrongSize = () => {
