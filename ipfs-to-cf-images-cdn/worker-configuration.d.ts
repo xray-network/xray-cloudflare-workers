@@ -1,7 +1,10 @@
+declare module "node:buffer"
+
 interface Env {
-	JWT_BEARER_TOKEN: string
-	KV_API_REQUESTS_COUNTER: KVNamespace
-	KV_API_HEALTH: KVNamespace
+	ACCOUNT_HASH: string
+	ACCOUNT_ID: string
+	ACCOUNT_KEY: string
+	OUTPUT: Fetcher
 
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
 	// MY_KV_NAMESPACE: KVNamespace;

@@ -1,3 +1,4 @@
-name = "cdn-cache-images"
+name = "ipfs-images-cdn-proxy"
 main = "src/index.ts"
 compatibility_date = "2023-11-24"
+node_compat = true
