@@ -1,6 +1,6 @@
 /**
- * @@ XRAY | Graph
- * Cloudflare IPFS (or Registry) to Images CDN
+ * @@ XRAY | Graph | IPFS Images CDN Proxy
+ * Proxying CIP25, CIP26, CIP68, or REGISTRY images from `xray-ipfs-images-cdn`
  * !!! Will be deprecated soon: moving to self-hosted IPFS caching solution
  * Learn more at https://developers.cloudflare.com/workers/
  */

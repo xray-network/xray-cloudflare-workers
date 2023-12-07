@@ -1,7 +1,7 @@
 /**
- * @@ XRAY | Graph
- * Cloudflare IPFS (or Registry) to Images CDN
- * !!! Will be deprecated soon: moving to self-hosted IPFS caching solution
+ * @@ XRAY | Graph | IPFS to Cloudflare Images CDN
+ * CIP25, CIP26, CIP68, or REGISTRY images to Cloudflare Images CDN
+ * Deprecated: moving to self-hosted IPFS caching solution
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
@@ -57,7 +57,7 @@ export default {
 						await uploadImageBase64ToCF(imageBase64, type, fingerprint, env)
 						return await serveImageFromCF(type, fingerprint, size, request, env)
 					}
-					
+
 					if (imageProvider.metadataProvider.type === "http" || imageProvider.metadataProvider.type === "ipfs") {
 						const imageRemoteURL = imageProvider.metadataProvider.data
 						const imageResponse = await fetch(imageRemoteURL)

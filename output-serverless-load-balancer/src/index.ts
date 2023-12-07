@@ -1,5 +1,5 @@
 /**
- * @@ XRAY | Graph Output
+ * @@ XRAY | Graph | Output Serverless Load Balancer
  * Cloudflare Serverless Load Balancer
  * Learn more at https://developers.cloudflare.com/workers/
  */
