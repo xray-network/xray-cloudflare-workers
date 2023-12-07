@@ -1,5 +1,5 @@
 /**
- * @@ XRAY | Graph | IPFS to Cloudflare Images CDN
+ * @@ XRAY | Graph | Metadata images from/to Cloudflare Images CDN
  * Proxying CIP25, CIP26, CIP68, or REGISTRY images from/to Cloudflare Images CDN
  * Learn more at https://developers.cloudflare.com/workers/
  */
