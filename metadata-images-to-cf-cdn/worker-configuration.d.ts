@@ -1,5 +1,3 @@
-declare module "node:buffer"
-
 interface Env {
 	ACCOUNT_HASH: string
 	ACCOUNT_ID: string

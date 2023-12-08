@@ -4,13 +4,13 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { Buffer } from "node:buffer"
 import * as Types from "./types"
 
 const API_GROUP = "cdn"
 const ALLOWED_METHODS = ["GET", "POST", "OPTIONS", "HEAD"]
 const ALLOWED_NETWORKS = ["mainnet", "preprod", "preview"]
-const IMG_SIZES = ["32", "64", "128", "256", "512", "1024", "2048"]
+const IMG_METADATA_SIZES = ["32", "64", "128", "256", "512", "1024", "2048"]
+const IMG_REGISTRY_SIZES = ["32", "64", "128", "256", "512"]
 const IMG_SIZE_LIMIT = 50_000_000 // Max file size limit in bytes
 
 export default {
@@ -33,7 +33,7 @@ export default {
 		if (group !== API_GROUP) return throw404()
 		if (!ALLOWED_NETWORKS.includes(network)) return throw404()
 		if (!fingerprint) return throw404()
-		if (!IMG_SIZES.includes(size)) return throw404WrongSize()
+		// if (!IMG_SIZES.includes(size)) return throw404WrongSize()
 
 		try {
 			return new Response("Hello world!")
